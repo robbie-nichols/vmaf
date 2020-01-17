@@ -5,8 +5,8 @@
 #include "cli_parse.h"
 #include "vidinput.h"
 
-#include "libvmaf/picture.h"
-#include "libvmaf/libvmaf.rc.h"
+#include <libvmaf/picture.h>
+#include <libvmaf/libvmaf.rc.h>
 
 static enum VmafPixelFormat pix_fmt_map(int pf)
 {
@@ -163,17 +163,17 @@ int main(int argc, char *argv[])
 
     VmafModel *model[c.model_cnt];
     for (unsigned i = 0; i < c.model_cnt; i++) {
-        err = vmaf_model_load_from_path(&model[i], c.model_path[i]);
+        err = vmaf_model_load_from_path(&model[i], c.model_config[i]);
         if (err) {
             fprintf(stderr, "problem loading model file: %s\n",
-                    c.model_path[i]);
+                    c.model_config[i]->path);
             return -1;
         }
         err = vmaf_use_features_from_model(vmaf, model[i]);
         if (err) {
             fprintf(stderr,
                     "problem loading feature extractors from model file: %s\n",
-                    c.model_path[i]);
+                    c.model_config[i]->path);
             return -1;
         }
     }
@@ -238,8 +238,11 @@ int main(int argc, char *argv[])
         fclose(outfile);
     }
 
-    for (unsigned i = 0; i < c.model_cnt; i++)
+    for (unsigned i = 0; i < c.model_cnt; i++) {
         vmaf_model_destroy(model[i]);
+        vmaf_model_config_destroy(c.model_config[i]);
+    }
+
     video_input_close(&vid_ref);
     video_input_close(&vid_dist);
     vmaf_close(vmaf);
