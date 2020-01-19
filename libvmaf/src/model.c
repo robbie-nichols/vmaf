@@ -6,17 +6,17 @@
 #include "svm.h"
 #include "unpickle.h"
 
-int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *config)
+int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *cfg)
 {
     VmafModel *const m = *model = malloc(sizeof(*m));
     if (!m) goto fail;
     memset(m, 0, sizeof(*m));
-    m->path = malloc(strlen(config->path) + 1);
+    m->path = malloc(strlen(cfg->path) + 1);
     if (!m->path) goto free_m;
-    strcpy(m->path, config->path);
-    m->name = malloc(strlen(config->name) + 1);
+    strcpy(m->path, cfg->path);
+    m->name = malloc(strlen(cfg->name) + 1);
     if (!m->name) goto free_path;
-    strcpy(m->name, config->name);
+    strcpy(m->name, cfg->name);
 
     // ugly, this shouldn't be implict (but it is)
     char *svm_path_suffix = ".model";
@@ -31,7 +31,7 @@ int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *config)
     m->svm = svm_load_model(svm_path);
     free(svm_path);
     if (!m->svm) goto free_name;
-    int err = vmaf_unpickle_model(m, m->path, config->flags);
+    int err = vmaf_unpickle_model(m, m->path, cfg->flags);
     if (err) goto free_svm;
     return 0;
 
@@ -59,10 +59,10 @@ void vmaf_model_destroy(VmafModel *model)
     free(model);
 }
 
-void vmaf_model_config_destroy(VmafModelConfig *config)
+void vmaf_model_config_destroy(VmafModelConfig *cfg)
 {
-    if (!config) return;
-    free(config->path);
-    free(config->name);
-    free(config);
+    if (!cfg) return;
+    free(cfg->path);
+    free(cfg->name);
+    free(cfg);
 }

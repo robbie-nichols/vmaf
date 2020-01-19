@@ -7,12 +7,12 @@ static char *test_model_load_and_destroy()
     int err;
 
     VmafModel *model;
-    VmafModelConfig config = {
+    VmafModelConfig cfg = {
         .path = "../../model/vmaf_v0.6.1.pkl",
         .name = "some_vmaf",
         .flags = VMAF_MODEL_FLAG_ENABLE_TRANSFORM,
     };
-    err = vmaf_model_load_from_path(&model, &config);
+    err = vmaf_model_load_from_path(&model, &cfg);
     mu_assert("problem during vmaf_model_load_from_path", !err);
     mu_assert("Model name is inconsistent.\n", !strcmp(model->name, "some_vmaf"));
     mu_assert("Score transform must be enabled.\n", model->score_transform.enabled);

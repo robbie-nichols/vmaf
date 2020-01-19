@@ -79,7 +79,7 @@ static unsigned parse_unsigned(const char *const optarg, const int option,
     return res;
 }
 
-static int parse_config(VmafModelConfig **config,
+static int parse_model_config(VmafModelConfig **cfg,
     const char *const optarg, const char *const app, unsigned int model_cnt)
 {
     /* some initializations */
@@ -96,7 +96,7 @@ static int parse_config(VmafModelConfig **config,
     strcpy(optarg_copy, optarg);
     token = strtok(optarg_copy, delim);
     /* set default model flag */
-    enum VmafModelFlags model_flags = VMAF_MODEL_FLAG_DEFAULT;
+    enum VmafModelFlags model_flags = VMAF_MODEL_FLAGS_DEFAULT;
     /* loop over tokens and populate model configuration */
     while (token != 0) {
         if(!strcmp(token, "path")) {
@@ -125,7 +125,7 @@ static int parse_config(VmafModelConfig **config,
     if (!path_set) {
         usage(app, "For every model, path needs to be set.\n");
     }
-    VmafModelConfig *const c = *config = malloc(sizeof(*c));
+    VmafModelConfig *const c = *cfg = malloc(sizeof(*c));
     if (!c) goto fail;
     memset(c, 0, sizeof(*c));
     c->path = malloc(strlen(model_path) + 1);
@@ -173,7 +173,7 @@ void cli_parse(const int argc, char *const *const argv,
                 usage(argv[0], "A maximum of %d models is supported\n",
                       CLI_SETTINGS_STATIC_ARRAY_LEN);
             }
-            parse_config(&(settings->model_config[settings->model_cnt]),
+            parse_model_config(&(settings->model_config[settings->model_cnt]),
                 optarg, argv[0], settings->model_cnt);
             settings->model_cnt++;
             break;

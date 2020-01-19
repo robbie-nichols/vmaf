@@ -3,7 +3,7 @@
 #include "test.h"
 #include "predict.h"
 
-#include <libvmaf/model.config.h>
+#include <libvmaf/model.h>
 
 static char *test_predict_score_at_index()
 {
@@ -14,12 +14,12 @@ static char *test_predict_score_at_index()
     mu_assert("problem during vmaf_feature_collector_init", !err);
 
     VmafModel *model;
-    VmafModelConfig config = {
+    VmafModelConfig cfg = {
         .path = "../../model/vmaf_v0.6.1.pkl",
         .name = "vmaf",
-        .flags = VMAF_MODEL_FLAG_DEFAULT,
+        .flags = VMAF_MODEL_FLAGS_DEFAULT,
     };
-    err = vmaf_model_load_from_path(&model, &config);
+    err = vmaf_model_load_from_path(&model, &cfg);
     mu_assert("problem during vmaf_model_load_from_path", !err);
 
     for (unsigned i = 0; i < model->n_features; i++) {

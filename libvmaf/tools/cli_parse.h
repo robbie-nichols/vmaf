@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include <libvmaf/libvmaf.rc.h>
-#include <libvmaf/model.config.h>
+#include <libvmaf/model.h>
 
 #define CLI_SETTINGS_STATIC_ARRAY_LEN 256
 

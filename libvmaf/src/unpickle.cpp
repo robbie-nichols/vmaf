@@ -1,6 +1,6 @@
 #include <errno.h>
 
-#include <libvmaf/model.config.h>
+#include <libvmaf/model.h>
 
 #include "chooseser.h"
 #include "model.h"
@@ -25,8 +25,8 @@ static int unpickle(VmafModel *model, const char *pickle_path,
 
     if (!((VAL_IS_NONE(score_clip)) || VAL_IS_LIST(score_clip)))
         return -EINVAL;
-    model->score_clip.enabled = !(VAL_IS_NONE(score_clip))
-                                && !(flags & VMAF_MODEL_FLAG_DISABLE_CLIP);
+    model->score_clip.enabled = !(VAL_IS_NONE(score_clip)) &&
+                                !(flags & VMAF_MODEL_FLAG_DISABLE_CLIP);
     if (model->score_clip.enabled) {
         model->score_clip.min = score_clip[0];
         model->score_clip.max = score_clip[1];
