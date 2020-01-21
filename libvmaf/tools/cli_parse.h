@@ -12,7 +12,7 @@ typedef struct {
     char *y4m_path_ref, *y4m_path_dist;
     char *output_path;
     enum VmafOutputFormat output_fmt;
-    VmafModelConfig *model_config[CLI_SETTINGS_STATIC_ARRAY_LEN];
+    VmafModelConfig model_config[CLI_SETTINGS_STATIC_ARRAY_LEN];
     unsigned model_cnt;
     char *feature[CLI_SETTINGS_STATIC_ARRAY_LEN];
     unsigned feature_cnt;

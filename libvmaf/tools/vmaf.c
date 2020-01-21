@@ -163,17 +163,17 @@ int main(int argc, char *argv[])
 
     VmafModel *model[c.model_cnt];
     for (unsigned i = 0; i < c.model_cnt; i++) {
-        err = vmaf_model_load_from_path(&model[i], c.model_config[i]);
+        err = vmaf_model_load_from_path(&model[i], &c.model_config[i]);
         if (err) {
             fprintf(stderr, "problem loading model file: %s\n",
-                    c.model_config[i]->path);
+                    c.model_config[i].path);
             return -1;
         }
         err = vmaf_use_features_from_model(vmaf, model[i]);
         if (err) {
             fprintf(stderr,
                     "problem loading feature extractors from model file: %s\n",
-                    c.model_config[i]->path);
+                    c.model_config[i].path);
             return -1;
         }
     }
@@ -240,7 +240,6 @@ int main(int argc, char *argv[])
 
     for (unsigned i = 0; i < c.model_cnt; i++) {
         vmaf_model_destroy(model[i]);
-        vmaf_model_config_destroy(c.model_config[i]);
     }
 
     video_input_close(&vid_ref);

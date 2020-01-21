@@ -2,9 +2,48 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <libvmaf/model.h>
+
 #include "model.h"
 #include "svm.h"
 #include "unpickle.h"
+
+char *generate_model_name(VmafModelConfig *cfg) {
+
+    char *clip_phrase = "_clip_disabled";
+    char *transform_phrase = "_score_transform_enabled";
+    size_t name_sz;
+    char *name;
+
+    if (!cfg->name) {
+        name_sz = strlen(cfg->path) + strlen(clip_phrase) +
+            strlen(transform_phrase) + 1 * sizeof(char);
+    } else {
+        name_sz = strlen(cfg->name) + 1 * sizeof(char);
+    }
+
+    name = malloc(name_sz);
+    if (!name) {
+        return NULL;
+    }
+    memset(name, 0, name_sz);
+
+    /* if there is no name, create a default one */
+    if (!cfg->name) {
+        strncat(name, cfg->path, strlen(cfg->path));
+        if (cfg->flags && (cfg->flags & VMAF_MODEL_FLAG_DISABLE_CLIP)) {
+            strncat(name, clip_phrase, strlen(clip_phrase));
+        }
+        if (cfg->flags && (cfg->flags & VMAF_MODEL_FLAG_ENABLE_TRANSFORM)) {
+            strncat(name, transform_phrase, strlen(transform_phrase));
+        }
+    } else {
+        strcpy(name, cfg->name);
+    }
+
+    return name;
+
+}
 
 int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *cfg)
 {
@@ -14,9 +53,10 @@ int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *cfg)
     m->path = malloc(strlen(cfg->path) + 1);
     if (!m->path) goto free_m;
     strcpy(m->path, cfg->path);
-    m->name = malloc(strlen(cfg->name) + 1);
+
+    /* if config does not have a name, create a default one */
+    m->name = generate_model_name(cfg);
     if (!m->name) goto free_path;
-    strcpy(m->name, cfg->name);
 
     // ugly, this shouldn't be implict (but it is)
     char *svm_path_suffix = ".model";
@@ -57,12 +97,4 @@ void vmaf_model_destroy(VmafModel *model)
         free(model->feature[i].name);
     free(model->feature);
     free(model);
-}
-
-void vmaf_model_config_destroy(VmafModelConfig *cfg)
-{
-    if (!cfg) return;
-    free(cfg->path);
-    free(cfg->name);
-    free(cfg);
 }

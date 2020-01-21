@@ -17,8 +17,6 @@ typedef struct VmafModelConfig {
     char *path;
 } VmafModelConfig;
 
-void vmaf_model_config_destroy(VmafModelConfig *cfg);
-
 int vmaf_model_load_from_path(VmafModel **model, VmafModelConfig *cfg);
 void vmaf_model_destroy(VmafModel *model);
 
