@@ -31,13 +31,12 @@
 #include "common/convolution.h"
 #include "common/convolution_internal.h"
 #include "motion_tools.h"
-
+ 
 #define convolution_f32_c convolution_f32_c_s
 #define FILTER_5           FILTER_5_s
 #define offset_image       offset_image_s
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
-// My extra #defines
 // frames per second
 #define FPS 4
 // minimum (seconds) of frame gap
@@ -59,10 +58,11 @@ float vmaf_image_sad_c(const float *img1, const float *img2, int width, int heig
             float img1px = img1[i * img1_stride + j];
             float img2px = img2[i * img2_stride + j];  
             // if running through the first time, print out all the motion scores
-            // so that I can use them in the alpha masking.
+            // so that they can be used in alpha masking.
             if (pass == 0){
                 if(j == width - 1 && i == height - 1){     
-                    // no comma after the final score for parsing in cinemagraph.py
+                    // for csv parsing, the final value does not have
+                    // a trailing comma
                     printf("%f", fabs(img1px - img2px));   
                 } else {
                     printf("%f,", fabs(img1px - img2px));  
@@ -74,7 +74,7 @@ float vmaf_image_sad_c(const float *img1, const float *img2, int width, int heig
     }
     float res = (float) (accum / (width * height));
     if (pass == 0) { 
-        // marking the end of a frame with a newline for cinemagraph.py 
+        // mark the end of a frame with a newline for csv parsing frame-by-frame
         printf("\n"); 
     }
     return res;
@@ -257,7 +257,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     // 2   2
     // 2   3
     //  ...
-    // 52  52
+    // 51  52
     pass = 1;
     float *c_frame_buf = 0;
     float *c_blur_buf = 0;
@@ -265,11 +265,13 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     float *b_frame_buf = 0;
     if (!(c_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
         printf("error: aligned_malloc failed for c frame.\n");
-        fflush(stdout); goto fail_or_end;
+        fflush(stdout); 
+        goto fail_or_end;
     }
     if (!(c_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
         printf("error: aligned_malloc failed for c blur.\n");
-        fflush(stdout); goto fail_or_end;
+        fflush(stdout); 
+        goto fail_or_end;
     }
     if (!(b_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
         printf("error: aligned_malloc failed for b_buf.\n");
@@ -278,7 +280,8 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     }
     if (!(b_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
         printf("error: aligned_malloc failed for b blur.\n");
-        fflush(stdout); goto fail_or_end;
+        fflush(stdout); 
+        goto fail_or_end;
     }
     
     // Initialisation of scores and indices. The min_lower and min_upper are
@@ -289,7 +292,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     int min_lower_idx = 0;
     int min_upper_idx = global_frm_idx-1;
     // loop until all frames have been iterated over for comparison
-    for (int b_idx = 0; b_idx < global_frm_idx; b_idx++){   
+    for (int b_idx = 0; b_idx < global_frm_idx-1; b_idx++){   
         // read in the b frame to be the frame of reference  
         read_noref_frame(b_frame_buf, temp_buf, stride, user_data, b_idx * w * h * FRAME_INDEX_OFFSET);
         // offset and blur b_frame in preparation for comparison
@@ -315,7 +318,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
             }           
         } 
     }
-    // give result to cinemagraphs.py in expected format
+    // print result to the pipe in expected format
     printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
     // cleanup
     aligned_free(b_blur_buf);
@@ -332,5 +335,3 @@ fail_or_end:
 
     return ret;
 }
-
-
