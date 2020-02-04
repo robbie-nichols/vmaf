@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "file_io.h"
 #include "read_frame.h"
@@ -58,7 +59,7 @@ fail_or_end:
  */
 static int read_image_b(FILE * rfile, float *buf, float off, int width, int height, int stride)
 {
-	char *byte_ptr = (char *)buf;
+    char *byte_ptr = (char *)buf;
 	unsigned char *tmp_buf = 0;
 	int i, j;
 	int ret = 1;
@@ -89,7 +90,6 @@ static int read_image_b(FILE * rfile, float *buf, float off, int width, int heig
 
 		byte_ptr += stride;
 	}
-
 	ret = 0;
 
 fail_or_end:
@@ -253,14 +253,19 @@ fail_or_end:
     return ret;
 }
 
-int read_noref_frame(float *dis_data, float *temp_data, int stride_byte, void *s)
+int read_noref_frame(float *dis_data, float *temp_data, int stride_byte, void *s, int offset)
 {
     struct noref_data *user_data = (struct noref_data *)s;
     char *fmt = user_data->format;
     int w = user_data->width;
     int h = user_data->height;
     int ret;
-
+    
+    // if we have given a valid (non-negative) offset value, seek to that frame. This if statement
+    // should only be entered from the second pass in motion.c for comparing motion between all frames.
+    if (offset >= 0){
+        fseek(user_data->dis_rfile, offset, SEEK_SET);
+    }
     // read dis y
     if (!strcmp(fmt, "yuv420p") || !strcmp(fmt, "yuv422p") || !strcmp(fmt, "yuv444p"))
     {
@@ -283,7 +288,6 @@ int read_noref_frame(float *dis_data, float *temp_data, int stride_byte, void *s
         }
         return ret;
     }
-
     // dis skip u and v
     if (!strcmp(fmt, "yuv420p") || !strcmp(fmt, "yuv422p") || !strcmp(fmt, "yuv444p"))
     {
@@ -292,6 +296,7 @@ int read_noref_frame(float *dis_data, float *temp_data, int stride_byte, void *s
             fprintf(stderr, "dis fread u and v failed.\n");
             goto fail_or_end;
         }
+        
     }
     else if (!strcmp(fmt, "yuv420p10le") || !strcmp(fmt, "yuv422p10le") || !strcmp(fmt, "yuv444p10le"))
     {
