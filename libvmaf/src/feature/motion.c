@@ -31,7 +31,7 @@
 #include "common/convolution.h"
 #include "common/convolution_internal.h"
 #include "motion_tools.h"
- 
+
 #define convolution_f32_c convolution_f32_c_s
 #define FILTER_5           FILTER_5_s
 #define offset_image       offset_image_s
@@ -196,7 +196,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
             // ===============================================================
             offset_image(ref_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
             convolution_f32_c(FILTER_5, 5, ref_buf, blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));
-        } 
+        }
 
         // reading a buffer ahead, important for knowing if the last iteration or not
         ret = read_noref_frame(next_ref_buf, temp_buf, stride, user_data, -1);
@@ -292,7 +292,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     int min_lower_idx = 0;
     int min_upper_idx = global_frm_idx-1;
     // loop until all frames have been iterated over for comparison
-    for (int b_idx = 0; b_idx < global_frm_idx-1; b_idx++){   
+    for (int b_idx = 0; b_idx < global_frm_idx - 1; b_idx++){   
         // read in the b frame to be the frame of reference  
         read_noref_frame(b_frame_buf, temp_buf, stride, user_data, b_idx * w * h * FRAME_INDEX_OFFSET);
         // offset and blur b_frame in preparation for comparison
