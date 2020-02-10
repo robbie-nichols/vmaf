@@ -31,6 +31,7 @@
 #include "common/convolution.h"
 #include "common/convolution_internal.h"
 #include "motion_tools.h"
+#include "../tools/read_frame.h"
 
 #define convolution_f32_c convolution_f32_c_s
 #define FILTER_5           FILTER_5_s
@@ -40,9 +41,9 @@
 // frames per second
 #define FPS 4
 // minimum (seconds) of frame gap
-#define MIN_GAP 2
+#define MIN_GAP 2.5
 // maximum (seconds) of frame gap
-#define MAX_GAP 4
+#define MAX_GAP 8
 // discovered multiplier for correct frame indexing
 #define FRAME_INDEX_OFFSET 1.5
 
@@ -80,6 +81,20 @@ float vmaf_image_sad_c(const float *img1, const float *img2, int width, int heig
     return res;
 }
 
+float vmaf_image_selected_cells(const float *img1, const float *img2, int width, int height, int img1_stride, int img2_stride, int *cells_to_compare, int array_len){
+    float accum = (float)0.0;
+    for(int cell_idx = 0; cell_idx < array_len; cell_idx++){
+        int i = cells_to_compare[cell_idx] / height;
+        int j = cells_to_compare[cell_idx] % height;
+        float img1px = img1[i * img1_stride + j];
+        float img2px = img2[i * img2_stride + j]; 
+
+        accum += fabs(img1px - img2px);
+    }
+    float res = (float) (accum / (width * height));
+    return res;
+}
+
 float check_frame(const float *img1, int w_h)
 {
     float accum = (float)0.0;
@@ -93,7 +108,7 @@ float check_frame(const float *img1, int w_h)
 /** 
  * Note: ref_stride and dis_stride are in terms of bytes
  */
-int compute_motion(const float *ref, const float *dis, int w, int h, int ref_stride, int dis_stride, double *score, int pass)
+int compute_motion(const float *ref, const float *dis, int w, int h, int ref_stride, int dis_stride, double *score, int pass, int *cells_to_compare)
 {
 
     if (ref_stride % sizeof(float) != 0)
@@ -109,7 +124,11 @@ int compute_motion(const float *ref, const float *dis, int w, int h, int ref_str
         goto fail;
     }
     // stride for vmaf_image_sad_c is in terms of (sizeof(float) bytes)
-    *score = vmaf_image_sad_c(ref, dis, w, h, ref_stride / sizeof(float), dis_stride / sizeof(float), pass);
+    if (cells_to_compare == NULL) {
+        *score = vmaf_image_sad_c(ref, dis, w, h, ref_stride / sizeof(float), dis_stride / sizeof(float), pass);
+    } else {
+        *score = vmaf_image_selected_cells(ref, dis, w, h, ref_stride / sizeof(float), dis_stride / sizeof(float), cells_to_compare, pass);
+    }
 
     return 0;
 
@@ -135,6 +154,8 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     // it prints all the individual cell scores (used for masking). 
     // If it is 1, we print the motion between the frames (used for N^2 comparions).
     int pass = 0;
+    struct noref_data *userData = (struct noref_data *)user_data;
+    // printf("userData->motion_map_filen: %s\n", userData->motion_map_filen);
 
     if (w <= 0 || h <= 0 || (size_t)w > ALIGN_FLOOR(INT_MAX) / sizeof(float)) { 
         goto fail_or_end; 
@@ -177,6 +198,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         goto fail_or_end;
     }
 
+    
     int frm_idx = -1;
     while (1) {
         // the next frame
@@ -228,7 +250,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         if (frm_idx == 0){
             score = 0.0; 
         } else {     
-            if ((ret = compute_motion(prev_blur_buf, blur_buf, w, h, stride, stride, &score, pass))){
+            if ((ret = compute_motion(prev_blur_buf, blur_buf, w, h, stride, stride, &score, pass, NULL))){
                 printf("error: compute_motion (prev) failed.\n");
                 fflush(stdout); 
                 goto fail_or_end;
@@ -243,7 +265,6 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
             break; 
         }
     }
-
     // The second pass (pass 1) is an N^2 comparison of relative motion between all frames
     // in the input video file. The outer loop frame is referred to as 'b_frame_buf' and 
     // the inner loop frame is 'c_frame_buf', you can think of 'b' as the reference frame
@@ -257,74 +278,83 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     // 2   2
     // 2   3
     //  ...
-    // 51  52
-    pass = 1;
-    float *c_frame_buf = 0;
-    float *c_blur_buf = 0;
-    float *b_blur_buf = 0;
-    float *b_frame_buf = 0;
-    if (!(c_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
-        printf("error: aligned_malloc failed for c frame.\n");
-        fflush(stdout); 
-        goto fail_or_end;
-    }
-    if (!(c_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
-        printf("error: aligned_malloc failed for c blur.\n");
-        fflush(stdout); 
-        goto fail_or_end;
-    }
-    if (!(b_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
-        printf("error: aligned_malloc failed for b_buf.\n");
-        fflush(stdout); 
-        goto fail_or_end;
-    }
-    if (!(b_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
-        printf("error: aligned_malloc failed for b blur.\n");
-        fflush(stdout); 
-        goto fail_or_end;
+    // 51  52 
+    if (userData->motion_map_filen != NULL) {
+        FILE *cells_to_check = NULL;
+        int size = userData->width * userData->height;
+        int cells_to_compare[size];
+        memset(cells_to_compare, 0, size*sizeof(int));
+        int valid_coord_index = 0;
+        valid_coord_index = populate_cells_to_compare(cells_to_check, userData, size, cells_to_compare);
+        pass = 1;
+        float *c_frame_buf = 0;
+        float *c_blur_buf = 0;
+        float *b_blur_buf = 0;
+        float *b_frame_buf = 0;
+        if (!(c_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
+            printf("error: aligned_malloc failed for c frame.\n");
+            fflush(stdout); 
+            goto fail_or_end;
+        }
+        if (!(c_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
+            printf("error: aligned_malloc failed for c blur.\n");
+            fflush(stdout); 
+            goto fail_or_end;
+        }
+        if (!(b_frame_buf = aligned_malloc(data_sz, MAX_ALIGN))) {
+            printf("error: aligned_malloc failed for b_buf.\n");
+            fflush(stdout); 
+            goto fail_or_end;
+        }
+        if (!(b_blur_buf = aligned_malloc(data_sz, MAX_ALIGN))){
+            printf("error: aligned_malloc failed for b blur.\n");
+            fflush(stdout); 
+            goto fail_or_end;
+        }
+        
+        // Initialisation of scores and indices. The min_lower and min_upper are
+        // initialised to give the entire video length as opposed to flag values 
+        // that would pass errors back to the python process, so that if an error 
+        // occurs, as has happened with very short videos, we use the whole video.
+        float min = -1.0;
+        int min_lower_idx = 0;
+        int min_upper_idx = global_frm_idx-1;
+        // loop until all frames have been iterated over for comparison
+        for (int b_idx = 0; b_idx < global_frm_idx - 1; b_idx++){   
+            // read in the b frame to be the frame of reference  
+            read_noref_frame(b_frame_buf, temp_buf, stride, user_data, b_idx * w * h * FRAME_INDEX_OFFSET);
+            // offset and blur b_frame in preparation for comparison
+            offset_image(b_frame_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
+            convolution_f32_c(FILTER_5, 5, b_frame_buf, b_blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));      
+            // loop from the frame index immediately after the current 'b' frame index until
+            // the end of the frames
+            for (int c_idx = b_idx + 1; c_idx < global_frm_idx; c_idx++){        
+                // read the frame given by the 'c' index offset as the new comparison frame
+                read_noref_frame(c_frame_buf, temp_buf, stride, user_data, c_idx * w * h * FRAME_INDEX_OFFSET);
+                // offset and blur the 'c' frame in preparation for motion calculation
+                offset_image(c_frame_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
+                convolution_f32_c(FILTER_5, 5, c_frame_buf, c_blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));
+                // compute the motion from b -> c with into score         
+                compute_motion(b_blur_buf, c_blur_buf, w, h, stride, stride, &score, valid_coord_index, cells_to_compare);   
+                // min -1.0 is the condition that shows no genuine minimum has been found yet.
+                // Otherwise the motion must be less than the current minimum and the index gap
+                // must meet the #define'd acceptable cinemagraph length as measured in frames
+                if((min == -1.0 || score < min) && MIN_GAP < (c_idx - b_idx) && (c_idx - b_idx) < MAX_GAP){
+                    min = score;
+                    min_lower_idx = b_idx;
+                    min_upper_idx = c_idx;
+                }           
+            } 
+        }
+        // print result to the pipe in expected format
+        printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
+        // cleanup
+        aligned_free(b_blur_buf);
+        aligned_free(b_frame_buf);
+        aligned_free(c_frame_buf);
+        aligned_free(c_blur_buf);
     }
     
-    // Initialisation of scores and indices. The min_lower and min_upper are
-    // initialised to give the entire video length as opposed to flag values 
-    // that would pass errors back to the python process, so that if an error 
-    // occurs, as has happened with very short videos, we use the whole video.
-    float min = -1.0;
-    int min_lower_idx = 0;
-    int min_upper_idx = global_frm_idx-1;
-    // loop until all frames have been iterated over for comparison
-    for (int b_idx = 0; b_idx < global_frm_idx - 1; b_idx++){   
-        // read in the b frame to be the frame of reference  
-        read_noref_frame(b_frame_buf, temp_buf, stride, user_data, b_idx * w * h * FRAME_INDEX_OFFSET);
-        // offset and blur b_frame in preparation for comparison
-        offset_image(b_frame_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
-        convolution_f32_c(FILTER_5, 5, b_frame_buf, b_blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));      
-        // loop from the frame index immediately after the current 'b' frame index until
-        // the end of the frames
-        for (int c_idx = b_idx + 1; c_idx < global_frm_idx; c_idx++){        
-            // read the frame given by the 'c' index offset as the new comparison frame
-            read_noref_frame(c_frame_buf, temp_buf, stride, user_data, c_idx * w * h * FRAME_INDEX_OFFSET);
-            // offset and blur the 'c' frame in preparation for motion calculation
-            offset_image(c_frame_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
-            convolution_f32_c(FILTER_5, 5, c_frame_buf, c_blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));
-            // compute the motion from b -> c with into score         
-            compute_motion(b_blur_buf, c_blur_buf, w, h, stride, stride, &score, pass);   
-            // min -1.0 is the condition that shows no genuine minimum has been found yet.
-            // Otherwise the motion must be less than the current minimum and the index gap
-            // must meet the #define'd acceptable cinemagraph length as measured in frames
-            if((min == -1.0 || score < min) && MIN_GAP * FPS < (c_idx - b_idx) && (c_idx - b_idx) < MAX_GAP * FPS){
-                min = score;
-                min_lower_idx = b_idx;
-                min_upper_idx = c_idx;
-            }           
-        } 
-    }
-    // print result to the pipe in expected format
-    printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
-    // cleanup
-    aligned_free(b_blur_buf);
-    aligned_free(b_frame_buf);
-    aligned_free(c_frame_buf);
-    aligned_free(c_blur_buf);
 fail_or_end:
     aligned_free(ref_buf);
     aligned_free(prev_blur_buf);
@@ -334,4 +364,25 @@ fail_or_end:
     aligned_free(temp_buf);
 
     return ret;
+}
+
+int populate_cells_to_compare(FILE *cells_to_check, struct noref_data *userData, int size, int *cells_to_compare){
+    int valid_coord_index = 0;     
+    if ((cells_to_check = fopen(userData->motion_map_filen, "r")) == NULL){
+        printf("file not opened\n");
+    } else {
+        char motion_cell_buffer[size];
+        memset(motion_cell_buffer, 0, size);
+        char *csv_string = fgets(motion_cell_buffer, size, cells_to_check);
+        // printf("%s csv string\n", csv_string);
+        char *token, *string, *tofree;
+        tofree = string = strdup(csv_string);
+        while ((token = strsep(&string, ",")) != NULL){
+            cells_to_compare[valid_coord_index] = atoi(token);
+            printf("cell_array[%d]: %d\n", valid_coord_index, cells_to_compare[valid_coord_index]);
+            valid_coord_index++;
+        }        
+        free(tofree);
+    } 
+    return valid_coord_index;
 }

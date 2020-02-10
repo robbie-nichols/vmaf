@@ -49,7 +49,7 @@ static void usage(void)
     );
 }
 
-int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char *dis_path, int w, int h)
+int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char *dis_path, int w, int h, char* motion_map_filen)
 {
     int ret = 0;
 
@@ -60,7 +60,7 @@ int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char 
         s->format = fmt;
         s->width = w;
         s->height = h;
-
+        s->motion_map_filen = motion_map_filen;
         ret = get_frame_offset(fmt, w, h, &(s->offset));
         if (ret)
         {
@@ -156,7 +156,7 @@ int main(int argc, const char **argv)
     const char *fmt;
     int w;
     int h;
-
+    char *motion_map_filen;
     if (argc < 7) {
         usage();
         return 2;
@@ -169,10 +169,15 @@ int main(int argc, const char **argv)
     w        = atoi(argv[5]);
     h        = atoi(argv[6]);
 
+    if (argc == 8){
+        motion_map_filen = argv[7];
+    } else {
+        motion_map_filen = NULL;
+    }
     if (w <= 0 || h <= 0) {
         usage();
         return 2;
     }
 
-    return run_vmaf(app, fmt, ref_path, dis_path, w, h);
+    return run_vmaf(app, fmt, ref_path, dis_path, w, h, motion_map_filen);
 }

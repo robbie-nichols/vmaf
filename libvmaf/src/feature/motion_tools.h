@@ -27,5 +27,4 @@ static const float FILTER_5_s[5] = {
         0.402619947,
         0.244201342,
         0.054488685};
-
 #endif /* MOTION_TOOLS_H_ */

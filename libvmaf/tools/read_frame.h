@@ -35,6 +35,7 @@ struct noref_data
     char* format; /* yuv420p, yuv422p, yuv444p, yuv420p10le, yuv422p10le, yuv444p10le */
     int width;
     int height;
+    char* motion_map_filen;
     size_t offset;
     FILE *dis_rfile;
 };
