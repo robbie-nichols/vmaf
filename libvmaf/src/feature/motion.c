@@ -41,9 +41,9 @@
 // frames per second
 #define FPS 4
 // minimum (seconds) of frame gap
-#define MIN_GAP 2.5
+#define MIN_GAP 1
 // maximum (seconds) of frame gap
-#define MAX_GAP 8
+#define MAX_GAP 15
 // discovered multiplier for correct frame indexing
 #define FRAME_INDEX_OFFSET 1.5
 
@@ -83,15 +83,18 @@ float vmaf_image_sad_c(const float *img1, const float *img2, int width, int heig
 
 float vmaf_image_selected_cells(const float *img1, const float *img2, int width, int height, int img1_stride, int img2_stride, int *cells_to_compare, int array_len){
     float accum = (float)0.0;
+    // printf("comparing cells\n");
     for(int cell_idx = 0; cell_idx < array_len; cell_idx++){
-        int i = cells_to_compare[cell_idx] / height;
-        int j = cells_to_compare[cell_idx] % height;
+        int i = cells_to_compare[cell_idx] / width;
+        int j = cells_to_compare[cell_idx] % width;
+        // printf("i->%d (/width) - j->%d (mod width)\n", i, j);
         float img1px = img1[i * img1_stride + j];
         float img2px = img2[i * img2_stride + j]; 
 
         accum += fabs(img1px - img2px);
     }
-    float res = (float) (accum / (width * height));
+    // printf("finished the comparison\n");
+    float res = (float) (accum / array_len);
     return res;
 }
 
@@ -155,7 +158,6 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     // If it is 1, we print the motion between the frames (used for N^2 comparions).
     int pass = 0;
     struct noref_data *userData = (struct noref_data *)user_data;
-    // printf("userData->motion_map_filen: %s\n", userData->motion_map_filen);
 
     if (w <= 0 || h <= 0 || (size_t)w > ALIGN_FLOOR(INT_MAX) / sizeof(float)) { 
         goto fail_or_end; 
@@ -198,7 +200,6 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         goto fail_or_end;
     }
 
-    
     int frm_idx = -1;
     while (1) {
         // the next frame
@@ -249,12 +250,16 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         // compute
         if (frm_idx == 0){
             score = 0.0; 
-        } else {     
-            if ((ret = compute_motion(prev_blur_buf, blur_buf, w, h, stride, stride, &score, pass, NULL))){
-                printf("error: compute_motion (prev) failed.\n");
-                fflush(stdout); 
-                goto fail_or_end;
-            }      
+        } else {   
+            // small optimisation to avoid re-calculating the motion scores when called with a file of csv values to check
+            if (userData->motion_map_filen == NULL){ 
+                if ((ret = compute_motion(prev_blur_buf, blur_buf, w, h, stride, stride, &score, pass, NULL))){
+                    printf("error: compute_motion (prev) failed.\n");
+                    fflush(stdout); 
+                    goto fail_or_end;
+                }   
+            }
+               
         }
         fflush(stdout);
         memcpy(prev_blur_buf, blur_buf, data_sz);
@@ -339,10 +344,11 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
                 // min -1.0 is the condition that shows no genuine minimum has been found yet.
                 // Otherwise the motion must be less than the current minimum and the index gap
                 // must meet the #define'd acceptable cinemagraph length as measured in frames
-                if((min == -1.0 || score < min) && MIN_GAP < (c_idx - b_idx) && (c_idx - b_idx) < MAX_GAP){
+                if((min == -1.0 || score < min) && 15 < (c_idx - b_idx)){
                     min = score;
                     min_lower_idx = b_idx;
                     min_upper_idx = c_idx;
+                    // printf("%f - %d->%d\n", min, min_lower_idx, min_upper_idx);
                 }           
             } 
         }
@@ -374,12 +380,11 @@ int populate_cells_to_compare(FILE *cells_to_check, struct noref_data *userData,
         char motion_cell_buffer[size];
         memset(motion_cell_buffer, 0, size);
         char *csv_string = fgets(motion_cell_buffer, size, cells_to_check);
-        // printf("%s csv string\n", csv_string);
         char *token, *string, *tofree;
         tofree = string = strdup(csv_string);
         while ((token = strsep(&string, ",")) != NULL){
             cells_to_compare[valid_coord_index] = atoi(token);
-            printf("cell_array[%d]: %d\n", valid_coord_index, cells_to_compare[valid_coord_index]);
+            // printf("cell_array[%d]: %d\n", valid_coord_index, cells_to_compare[valid_coord_index]);
             valid_coord_index++;
         }        
         free(tofree);

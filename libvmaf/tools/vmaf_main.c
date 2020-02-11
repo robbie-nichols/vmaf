@@ -52,7 +52,6 @@ static void usage(void)
 int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char *dis_path, int w, int h, char* motion_map_filen)
 {
     int ret = 0;
-
     if (!strcmp(app, "motion"))
     {
         struct noref_data *s;
@@ -163,7 +162,7 @@ int main(int argc, const char **argv)
     }
 
     app      = argv[1];
-    fmt         = argv[2];
+    fmt      = argv[2];
     ref_path = argv[3];
     dis_path = argv[4];
     w        = atoi(argv[5]);
