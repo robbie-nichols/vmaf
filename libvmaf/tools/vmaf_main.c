@@ -49,7 +49,7 @@ static void usage(void)
     );
 }
 
-int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char *dis_path, int w, int h, char* motion_map_filen)
+int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char *dis_path, int w, int h, char* motion_map_filen, char *mode, float fps, int bounding_box_sz)
 {
     int ret = 0;
     if (!strcmp(app, "motion"))
@@ -60,6 +60,9 @@ int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char 
         s->width = w;
         s->height = h;
         s->motion_map_filen = motion_map_filen;
+        s->mode = mode;
+        s->fps = fps;
+        s->search_sz = bounding_box_sz;
         ret = get_frame_offset(fmt, w, h, &(s->offset));
         if (ret)
         {
@@ -75,7 +78,6 @@ int run_vmaf(const char *app, const char *fmt, const char *ref_path, const char 
             ret = 1;
             goto fail_or_end_noref;
         }
-
         ret = motion(read_noref_frame, s, w, h, fmt);
 
 fail_or_end_noref:
@@ -155,8 +157,11 @@ int main(int argc, const char **argv)
     const char *fmt;
     int w;
     int h;
+    char *mode;
+    float fps;
+    int bounding_box_sz;
     char *motion_map_filen;
-    if (argc < 7) {
+    if (argc < 8) {
         usage();
         return 2;
     }
@@ -167,16 +172,51 @@ int main(int argc, const char **argv)
     dis_path = argv[4];
     w        = atoi(argv[5]);
     h        = atoi(argv[6]);
-
-    if (argc == 8){
-        motion_map_filen = argv[7];
+    mode     = argv[7];
+    if(strcmp(mode, "SUBSEQUENT_FRAMES") == 0){
+        // mode 0 is the normal way, no filepath or frame bounds needed, so 8 args
+        if(argc != 8){
+            usage();
+            return 2;
+        } else {
+            motion_map_filen = NULL;
+            fps = 0.0;
+            bounding_box_sz = -1;
+        }
+    } else if (strcmp(mode, "ALL_FRAMES") == 0){
+        // for mode 1 we need to compare all frames to all other frames. For this we need
+        // a file path for the pixels we check, and the frame rate per second, adding 2
+        // extra params to argc
+        if(argc != 10){
+            usage();
+            return 2;
+        } else {
+            motion_map_filen = argv[8];
+            fps = atof(argv[9]);
+            bounding_box_sz = -1;
+        }
+    } else if (strcmp(mode, "ALL_LOCAL_FRAMES") == 0){
+        // for mode 2, we need to do a local comparison with the frames around the pair chosen 
+        // when ran in mode 1. We need the size of the local bounding box to know which frames 
+        // to compare. We again need the txt file. If the video received is already trimmed from
+        // (lower_index - bounding box size -> uppder index + bounding box size) then we only need the
+        // size of the box to know which other frames to compare. Hence 2 extra args.
+        if(argc != 10){
+            usage();
+            return 2;
+        } else {
+            motion_map_filen = argv[8];
+            fps = 0.0;
+            bounding_box_sz = atoi(argv[9]);
+        }
     } else {
-        motion_map_filen = NULL;
-    }
-    if (w <= 0 || h <= 0) {
         usage();
         return 2;
     }
 
-    return run_vmaf(app, fmt, ref_path, dis_path, w, h, motion_map_filen);
+    if (w <= 0 || h <= 0) {
+        usage();
+        return 2;
+    }
+    return run_vmaf(app, fmt, ref_path, dis_path, w, h, motion_map_filen, mode, fps, bounding_box_sz);
 }

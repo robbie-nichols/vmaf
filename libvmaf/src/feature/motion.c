@@ -38,10 +38,8 @@
 #define offset_image       offset_image_s
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
-// frames per second
-#define FPS 4
 // minimum (seconds) of frame gap
-#define MIN_GAP 1
+#define MIN_GAP 1.5
 // maximum (seconds) of frame gap
 #define MAX_GAP 15
 // discovered multiplier for correct frame indexing
@@ -83,18 +81,15 @@ float vmaf_image_sad_c(const float *img1, const float *img2, int width, int heig
 
 float vmaf_image_selected_cells(const float *img1, const float *img2, int width, int height, int img1_stride, int img2_stride, int *cells_to_compare, int array_len){
     float accum = (float)0.0;
-    // printf("comparing cells\n");
     for(int cell_idx = 0; cell_idx < array_len; cell_idx++){
         int i = cells_to_compare[cell_idx] / width;
         int j = cells_to_compare[cell_idx] % width;
-        // printf("i->%d (/width) - j->%d (mod width)\n", i, j);
         float img1px = img1[i * img1_stride + j];
         float img2px = img2[i * img2_stride + j]; 
 
         accum += fabs(img1px - img2px);
     }
-    // printf("finished the comparison\n");
-    float res = (float) (accum / array_len);
+    float res = (float) (accum / (width * height));
     return res;
 }
 
@@ -199,7 +194,6 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         fflush(stdout); 
         goto fail_or_end;
     }
-
     int frm_idx = -1;
     while (1) {
         // the next frame
@@ -284,7 +278,10 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
     // 2   3
     //  ...
     // 51  52 
+    
     if (userData->motion_map_filen != NULL) {
+        // There is a bug if motion_map_filen is a valid name but running in subsequent frame mode
+        // assert(strcmp(userData->mode, "SUBSEQUENT_FRAMES") != 0);
         FILE *cells_to_check = NULL;
         int size = userData->width * userData->height;
         int cells_to_compare[size];
@@ -321,19 +318,47 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         // initialised to give the entire video length as opposed to flag values 
         // that would pass errors back to the python process, so that if an error 
         // occurs, as has happened with very short videos, we use the whole video.
+        int min_frame_gap = MIN_GAP * userData->fps;
+        int max_frame_gap = MAX_GAP * userData->fps;
+        // 
+        int b_end = global_frm_idx - min_frame_gap;
+        printf("number of frames: %d - b_end = %d\n", global_frm_idx-1, b_end);
+
+        // if (strcmp(userData->mode, "ALL_LOCAL_FRAMES") == 0){
+        //     // we use the '2 *' assuming the trimmed raw input file starts from index - search_size
+        //     // and so we need to go upto index + search_size
+        //     c_start = global_frm_idx - 2 * userData->search_sz;
+        //     b_end = 2 * userData->search_sz;
+        //     if (b_end > c_start){
+        //         int tmp = b_end;
+        //         b_end = c_start;
+        //         c_start = tmp;
+        //     } else if (b_end == c_start){
+        //         b_end--;
+        //     }
+        // } else {
+        //     b_end = (global_frm_idx - 1) - 
+        // }
+        // printf("search_sz = %d, b_start = %d, b_end = %d, c_start = %d, c_end = %d\n", userData->search_sz, b_start, b_end, c_start, c_end);
         float min = -1.0;
         int min_lower_idx = 0;
         int min_upper_idx = global_frm_idx-1;
         // loop until all frames have been iterated over for comparison
-        for (int b_idx = 0; b_idx < global_frm_idx - 1; b_idx++){   
+        int b_idx = 0;
+        while (b_idx < b_end){   
             // read in the b frame to be the frame of reference  
             read_noref_frame(b_frame_buf, temp_buf, stride, user_data, b_idx * w * h * FRAME_INDEX_OFFSET);
             // offset and blur b_frame in preparation for comparison
             offset_image(b_frame_buf, OPT_RANGE_PIXEL_OFFSET, w, h, stride);
             convolution_f32_c(FILTER_5, 5, b_frame_buf, b_blur_buf, temp_buf, w, h, stride / sizeof(float), stride / sizeof(float));      
-            // loop from the frame index immediately after the current 'b' frame index until
-            // the end of the frames
-            for (int c_idx = b_idx + 1; c_idx < global_frm_idx; c_idx++){        
+            // loop from the frame index from the first frame an within the acceptable range to the last
+            // and make sure we don't run off the end of the video i.e. limit c_end to number of frames   
+            int c_end = global_frm_idx;
+            int c_idx = b_idx + min_frame_gap;
+            if (b_idx + max_frame_gap < global_frm_idx) {
+                c_end = b_idx + max_frame_gap;
+            } 
+            while (c_idx < c_end){        
                 // read the frame given by the 'c' index offset as the new comparison frame
                 read_noref_frame(c_frame_buf, temp_buf, stride, user_data, c_idx * w * h * FRAME_INDEX_OFFSET);
                 // offset and blur the 'c' frame in preparation for motion calculation
@@ -344,16 +369,43 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
                 // min -1.0 is the condition that shows no genuine minimum has been found yet.
                 // Otherwise the motion must be less than the current minimum and the index gap
                 // must meet the #define'd acceptable cinemagraph length as measured in frames
-                if((min == -1.0 || score < min) && 15 < (c_idx - b_idx)){
-                    min = score;
-                    min_lower_idx = b_idx;
-                    min_upper_idx = c_idx;
-                    // printf("%f - %d->%d\n", min, min_lower_idx, min_upper_idx);
-                }           
+                if(strcmp(userData->mode, "ALL_FRAMES") == 0){
+                    if((min == -1.0 || score < min)){
+                        min = score;
+                        min_lower_idx = b_idx;
+                        min_upper_idx = c_idx;
+                        // print result to the pipe in expected format                     
+                        // running in ALL_FRAMES mode, don't care about score just indices
+                        printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
+                    } 
+                    c_idx += 4;
+                } else if (strcmp(userData->mode, "ALL_LOCAL_FRAMES") == 0){
+                    if((min == -1.0 || score < min)){
+                        min = score;
+                        min_lower_idx = b_idx;
+                        min_upper_idx = c_idx;
+                        printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);
+                    } 
+                    c_idx++; 
+                }
+                // printf("b idx = %d, c idx = %d\n", b_idx, c_idx);                             
             } 
+            if(strcmp(userData->mode, "ALL_FRAMES") == 0){
+                b_idx += 4;
+            } else {
+                b_idx++; 
+            }
+                 
         }
-        // print result to the pipe in expected format
         printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
+        // // print result to the pipe in expected format
+        // if (strcmp(userData->mode, "ALL_LOCAL_FRAMES") == 0){
+        //     printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
+        // } else {
+        //     // running in ALL_FRAMES mode, don't care about score just indices
+        //     printf("%d,%d\n", min_lower_idx, min_upper_idx);  
+        // }
+        
         // cleanup
         aligned_free(b_blur_buf);
         aligned_free(b_frame_buf);

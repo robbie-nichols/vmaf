@@ -36,6 +36,9 @@ struct noref_data
     int width;
     int height;
     char* motion_map_filen;
+    char* mode;
+    float fps;
+    int search_sz;
     size_t offset;
     FILE *dis_rfile;
 };
