@@ -39,7 +39,7 @@
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 // minimum (seconds) of frame gap
-#define MIN_GAP 1.5
+#define MIN_GAP 3
 // maximum (seconds) of frame gap
 #define MAX_GAP 15
 // discovered multiplier for correct frame indexing
@@ -378,7 +378,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
                         // running in ALL_FRAMES mode, don't care about score just indices
                         printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
                     } 
-                    c_idx += 4;
+                    // c_idx += 4;
                 } else if (strcmp(userData->mode, "ALL_LOCAL_FRAMES") == 0){
                     if((min == -1.0 || score < min)){
                         min = score;
@@ -386,15 +386,16 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
                         min_upper_idx = c_idx;
                         printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);
                     } 
-                    c_idx++; 
+                    
                 }
+                c_idx++; 
                 // printf("b idx = %d, c idx = %d\n", b_idx, c_idx);                             
             } 
-            if(strcmp(userData->mode, "ALL_FRAMES") == 0){
-                b_idx += 4;
-            } else {
+            // if(strcmp(userData->mode, "ALL_FRAMES") == 0){
+            //     b_idx += 4;
+            // } else {
                 b_idx++; 
-            }
+            // }
                  
         }
         printf("%f,%d,%d\n", min, min_lower_idx, min_upper_idx);  
