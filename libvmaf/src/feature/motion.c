@@ -322,7 +322,7 @@ int motion(int (*read_noref_frame)(float *main_data, float *temp_data, int strid
         int max_frame_gap = MAX_GAP * userData->fps;
         // 
         int b_end = global_frm_idx - min_frame_gap;
-        printf("number of frames: %d - b_end = %d\n", global_frm_idx-1, b_end);
+        // printf("number of frames: %d - b_end = %d\n", global_frm_idx-1, b_end);
 
         // if (strcmp(userData->mode, "ALL_LOCAL_FRAMES") == 0){
         //     // we use the '2 *' assuming the trimmed raw input file starts from index - search_size
