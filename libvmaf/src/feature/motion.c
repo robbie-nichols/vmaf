@@ -39,7 +39,7 @@
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 // minimum (seconds) of frame gap
-#define MIN_GAP 3
+#define MIN_GAP 2
 // maximum (seconds) of frame gap
 #define MAX_GAP 15
 // discovered multiplier for correct frame indexing
